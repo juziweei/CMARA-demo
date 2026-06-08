@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+from uuid import uuid4
+
+from src.interface.runtime import RuntimeBundle, build_runtime, reset_demo_state
+from src.interface.session import PendingClarification, TurnResult
+from src.memory.lightmem_store import MemoryHit
+
+DEFAULT_SESSION_ID = "default"
+
+
+class APIServiceError(RuntimeError):
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@dataclass
+class SessionState:
+    runtime: RuntimeBundle
+    pending_by_id: dict[str, PendingClarification] = field(default_factory=dict)
+
+
+class DemoAPIService:
+    def __init__(
+        self,
+        *,
+        runtime_factory: Callable[[], RuntimeBundle] | None = None,
+        reset_callback: Callable[[], None] | None = None,
+    ) -> None:
+        self._runtime_factory = runtime_factory or build_runtime
+        self._reset_callback = reset_callback or reset_demo_state
+        self._state = SessionState(runtime=self._runtime_factory())
+
+    def health(self) -> dict[str, Any]:
+        return {"status": "ok", "session_id": DEFAULT_SESSION_ID}
+
+    def turn(self, *, text: str, session_id: str | None = None) -> dict[str, Any]:
+        self._require_session(session_id)
+        normalized = str(text or "").strip()
+        if not normalized:
+            raise APIServiceError("text must not be empty")
+        result = self._state.runtime.session.handle_user_message(normalized)
+        return self._serialize_turn_result(result)
+
+    def clarification(
+        self,
+        *,
+        answer: str,
+        pending_id: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_session(session_id)
+        normalized_answer = str(answer or "").strip()
+        if not normalized_answer:
+            raise APIServiceError("answer must not be empty")
+        pending_key = str(pending_id or "").strip()
+        if not pending_key:
+            raise APIServiceError("pending_id must not be empty")
+        pending = self._state.pending_by_id.pop(pending_key, None)
+        if pending is None:
+            raise APIServiceError(
+                f"pending clarification not found: {pending_key}",
+                status_code=404,
+            )
+        result = self._state.runtime.session.handle_clarification(
+            pending,
+            normalized_answer,
+        )
+        return self._serialize_turn_result(result)
+
+    def summarize(self, *, session_id: str | None = None) -> dict[str, Any]:
+        self._require_session(session_id)
+        additions = self._state.runtime.summarizer.summarize(
+            self._state.runtime.session.session_messages
+        )
+        return {
+            "session_id": DEFAULT_SESSION_ID,
+            "added_preferences": [record.to_dict() for record in additions],
+            "count": len(additions),
+        }
+
+    def preferences(self, *, session_id: str | None = None) -> dict[str, Any]:
+        self._require_session(session_id)
+        records = self._state.runtime.preference_table.list_preferences()
+        return {
+            "session_id": DEFAULT_SESSION_ID,
+            "preferences": [record.to_dict() for record in records],
+            "count": len(records),
+        }
+
+    def reset(self, *, session_id: str | None = None) -> dict[str, Any]:
+        self._require_session(session_id)
+        self._reset_callback()
+        self._state = SessionState(runtime=self._runtime_factory())
+        return {"session_id": DEFAULT_SESSION_ID, "status": "reset"}
+
+    def _serialize_turn_result(self, result: TurnResult) -> dict[str, Any]:
+        pending_payload: dict[str, Any] | None = None
+        if result.pending is not None:
+            pending_id = uuid4().hex
+            self._state.pending_by_id[pending_id] = result.pending
+            pending_payload = {
+                "pending_id": pending_id,
+                "question": result.pending.question,
+                "original_context": result.pending.original_context,
+            }
+
+        return {
+            "session_id": DEFAULT_SESSION_ID,
+            "status": result.status,
+            "assistant_text": result.assistant_text,
+            "decision": {
+                "action": result.decision.action,
+                "tool_name": result.decision.tool_name,
+                "tool_args": dict(result.decision.tool_args),
+                "question": result.decision.question,
+                "rationale": result.decision.rationale,
+            },
+            "tool_result": result.tool_result,
+            "retrieval_hits": [_serialize_hit(hit) for hit in result.retrieval_hits],
+            "retrieved_preferences": list(result.retrieved_prefs),
+            "pending": pending_payload,
+            "learned_preference": (
+                result.learned_preference.to_dict()
+                if result.learned_preference is not None
+                else None
+            ),
+            "expired_preferences": [
+                record.to_dict() for record in result.expired_preferences
+            ],
+            "decision_trace": result.decision_trace,
+        }
+
+    def _require_session(self, session_id: str | None) -> None:
+        normalized = str(session_id or DEFAULT_SESSION_ID).strip() or DEFAULT_SESSION_ID
+        if normalized != DEFAULT_SESSION_ID:
+            raise APIServiceError(
+                "this demo API currently supports only session_id='default'"
+            )
+def _serialize_hit(hit: MemoryHit) -> dict[str, Any]:
+    return {
+        "id": hit.id,
+        "memory": hit.memory,
+        "time_stamp": hit.time_stamp,
+        "speaker_name": hit.speaker_name,
+        "score": hit.score,
+        "payload": dict(hit.payload),
+    }
