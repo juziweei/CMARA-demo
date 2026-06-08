@@ -6,6 +6,7 @@ TOOLS_META: dict[str, dict[str, Any]] = {
     "set_ac_temperature": {"cost": "low", "reversible": True},
     "set_seat_heating": {"cost": "low", "reversible": True},
     "ask_user": {"cost": "zero", "reversible": True},
+    "general_chat": {"cost": "zero", "reversible": True},
 }
 
 TOOLS_SCHEMA: list[dict[str, Any]] = [
@@ -63,6 +64,24 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "general_chat",
+            "description": "Respond naturally to the user when their query is not a car-control request (greetings, small talk, questions about weather, news, etc.). Use this for any non-vehicle-function conversation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "response": {
+                        "type": "string",
+                        "description": "A natural, friendly response in Chinese to the user's non-car-control message.",
+                    }
+                },
+                "required": ["response"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -100,10 +119,22 @@ def ask_user(question: str) -> dict[str, Any]:
     }
 
 
+def general_chat(response: str) -> dict[str, Any]:
+    text = str(response).strip()
+    if not text:
+        raise ValueError("General chat response must not be empty.")
+    return {
+        "tool": "general_chat",
+        "status": "replied",
+        "message": text,
+    }
+
+
 TOOL_EXECUTORS: dict[str, Callable[..., dict[str, Any]]] = {
     "set_ac_temperature": set_ac_temperature,
     "set_seat_heating": set_seat_heating,
     "ask_user": ask_user,
+    "general_chat": general_chat,
 }
 
 

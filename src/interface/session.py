@@ -241,6 +241,8 @@ class DemoSession:
                 ),
                 decision_trace=decision_trace,
             )
+        # general_chat and car-function ACT both go here
+        status = "replied" if decision.tool_name == "general_chat" else "acted"
         assistant_message = {
             "role": "assistant",
             "content": tool_result["message"],
@@ -249,7 +251,7 @@ class DemoSession:
         self.session_messages.append(assistant_message)
         self.memory_store.add([*memory_inputs, assistant_message])
         return TurnResult(
-            status="acted",
+            status=status,
             assistant_text=tool_result["message"],
             decision=decision,
             tool_result=tool_result,

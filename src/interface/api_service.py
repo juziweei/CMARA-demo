@@ -97,6 +97,48 @@ class DemoAPIService:
         self._state = SessionState(runtime=self._runtime_factory())
         return {"session_id": DEFAULT_SESSION_ID, "status": "reset"}
 
+    def update_preference(
+        self,
+        *,
+        record_id: int,
+        preference: str | None = None,
+        value: Any = None,
+        condition: dict[str, Any] | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        evidence: str | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_session(session_id)
+        from src.memory.preference_table import Condition
+
+        parsed_condition = Condition.from_dict(condition) if condition else None
+        updated = self._state.runtime.preference_table.update_by_id(
+            record_id=record_id,
+            preference=preference,
+            value=value,
+            condition=parsed_condition,
+            status=status,
+            source=source,
+            evidence=evidence,
+        )
+        if updated is None:
+            raise APIServiceError(
+                f"preference not found: {record_id}", status_code=404
+            )
+        return {"session_id": DEFAULT_SESSION_ID, "preference": updated.to_dict()}
+
+    def delete_preference(
+        self, *, record_id: int, session_id: str | None = None
+    ) -> dict[str, Any]:
+        self._require_session(session_id)
+        deleted = self._state.runtime.preference_table.forget(record_id)
+        if not deleted:
+            raise APIServiceError(
+                f"preference not found: {record_id}", status_code=404
+            )
+        return {"session_id": DEFAULT_SESSION_ID, "deleted_id": record_id}
+
     def _serialize_turn_result(self, result: TurnResult) -> dict[str, Any]:
         pending_payload: dict[str, Any] | None = None
         if result.pending is not None:

@@ -362,6 +362,37 @@ class PreferenceTable:
         self._save(kept)
         return True
 
+    def update_by_id(
+        self,
+        record_id: int,
+        *,
+        preference: str | None = None,
+        value: Any = _UNSET,
+        condition: Condition | None = None,
+        status: PreferenceStatus | None = None,
+        source: PreferenceSource | None = None,
+        evidence: str | None = None,
+    ) -> PreferenceRecord | None:
+        records = self._load()
+        for index, record in enumerate(records):
+            if record.id != record_id:
+                continue
+            updated = PreferenceRecord(
+                id=record.id,
+                preference=preference if preference is not None else record.preference,
+                value=record.value if value is _UNSET else value,
+                condition=condition if condition is not None else record.condition,
+                status=status if status is not None else record.status,
+                source=source if source is not None else record.source,
+                evidence=evidence if evidence is not None else record.evidence,
+                lightmem_ref=record.lightmem_ref,
+                timestamp=record.timestamp,
+            )
+            records[index] = updated
+            self._save(records)
+            return updated
+        return None
+
     def find_relevant(
         self,
         *,
