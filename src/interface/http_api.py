@@ -65,6 +65,28 @@ def create_handler(
             if parsed.path == "/reset":
                 self._dispatch(lambda: service.reset(session_id=body.get("session_id")))
                 return
+            if parsed.path == "/preferences/update":
+                self._dispatch(
+                    lambda: service.update_preference(
+                        record_id=int(body.get("id", 0)),
+                        preference=body.get("preference"),
+                        value=body.get("value"),
+                        condition=body.get("condition"),
+                        status=body.get("status"),
+                        source=body.get("source"),
+                        evidence=body.get("evidence"),
+                        session_id=body.get("session_id"),
+                    )
+                )
+                return
+            if parsed.path == "/preferences/delete":
+                self._dispatch(
+                    lambda: service.delete_preference(
+                        record_id=int(body.get("id", 0)),
+                        session_id=body.get("session_id"),
+                    )
+                )
+                return
             self._send_error_payload(HTTPStatus.NOT_FOUND, "route not found")
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003

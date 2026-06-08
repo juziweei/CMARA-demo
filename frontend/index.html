@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMARA Demo · 车载长期记忆系统</title>
+<style>
+/* ====== RESET & BASE ====== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-primary:#0d1117;--bg-secondary:#161b22;--bg-tertiary:#21262d;
+  --bg-card:#1c2128;--border:#30363d;--text-primary:#e6edf3;
+  --text-secondary:#8b949e;--text-muted:#6e7681;
+  --accent-blue:#58a6ff;--accent-green:#3fb950;--accent-orange:#d2991d;
+  --accent-purple:#a371f7;--accent-red:#f85149;--accent-cyan:#39d2c0;
+  --radius:8px;--radius-sm:4px;--shadow:0 2px 8px rgba(0,0,0,0.3);
+  --font-mono:'Cascadia Code','Fira Code',Consolas,monospace;
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font-sans);background:var(--bg-primary);
+  color:var(--text-primary);display:flex;flex-direction:column;
+  font-size:14px;line-height:1.5;
+}
+
+/* ====== HEADER ====== */
+.header{
+  background:var(--bg-secondary);border-bottom:1px solid var(--border);
+  padding:8px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:10;
+}
+.header-logo{font-size:17px;font-weight:700;color:var(--accent-blue);white-space:nowrap}
+.header-logo span{color:var(--text-secondary);font-weight:400;font-size:12px;margin-left:4px}
+.header-spacer{flex:1}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.online{background:var(--accent-green);box-shadow:0 0 6px var(--accent-green)}
+.status-dot.offline{background:var(--accent-red)}
+.status-dot.checking{background:var(--accent-orange);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+.btn{
+  padding:5px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;
+  font-size:12px;font-family:var(--font-sans);transition:all 0.15s;white-space:nowrap;
+}
+.btn:hover{background:var(--border)}
+.btn.primary{background:var(--accent-blue);border-color:var(--accent-blue);color:#fff}
+.btn.primary:hover{background:#4090e0}
+.btn.danger{border-color:var(--accent-red);color:var(--accent-red)}
+.btn.danger:hover{background:rgba(248,81,73,0.15)}
+.btn.accent{border-color:var(--accent-purple);color:var(--accent-purple)}
+.btn.accent:hover{background:rgba(163,113,247,0.15)}
+.btn.success{border-color:var(--accent-green);color:var(--accent-green)}
+.btn.success:hover{background:rgba(63,185,80,0.15)}
+.btn.sm{padding:2px 8px;font-size:10px}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+input[type=text],input[type=number],select,textarea{
+  background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text-primary);padding:5px 10px;font-size:12px;font-family:var(--font-sans);
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-blue)}
+
+/* ====== MAIN LAYOUT ====== */
+.main{display:flex;flex:1;overflow:hidden}
+
+/* ====== CHAT PANEL (left) ====== */
+.chat-panel{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border)}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat-messages::-webkit-scrollbar{width:6px}
+.chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.msg{max-width:88%;animation:slideIn 0.25s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end}.msg.assistant{align-self:flex-start}.msg.system{align-self:center;max-width:94%}
+.msg-bubble{padding:10px 14px;border-radius:var(--radius);line-height:1.6;word-break:break-word;white-space:pre-wrap}
+.msg.user .msg-bubble{background:var(--accent-blue);color:#fff;border-bottom-right-radius:2px}
+.msg.assistant .msg-bubble{background:var(--bg-tertiary);color:var(--text-primary);border-bottom-left-radius:2px}
+.msg.system .msg-bubble{background:var(--bg-card);border:1px dashed var(--border);color:var(--text-secondary);font-size:12px;text-align:center}
+.msg-label{font-size:11px;color:var(--text-muted);margin-bottom:2px;padding:0 4px}
+.msg.user .msg-label{text-align:right}
+.msg-meta{font-size:10px;color:var(--text-muted);margin-top:4px;padding:0 4px;display:flex;gap:6px;align-items:center}
+.msg.user .msg-meta{justify-content:flex-end}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase}
+.badge.acted{background:rgba(63,185,80,0.2);color:var(--accent-green)}
+.badge.needs_user_input{background:rgba(210,153,29,0.2);color:var(--accent-orange)}
+.badge.replied{background:rgba(57,210,192,0.2);color:var(--accent-cyan)}
+.badge.learned{background:rgba(163,113,247,0.2);color:var(--accent-purple)}
+.badge.expired{background:rgba(248,81,73,0.2);color:var(--accent-red)}
+
+/* Pending bar */
+.pending-bar{
+  background:linear-gradient(135deg,rgba(210,153,29,0.12),rgba(210,153,29,0.04));
+  border:1px solid rgba(210,153,29,0.35);border-radius:var(--radius);
+  padding:12px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:10px;flex-shrink:0;
+  animation:pendingPulse 2s infinite;
+}
+@keyframes pendingPulse{0%,100%{border-color:rgba(210,153,29,0.35)}50%{border-color:rgba(210,153,29,0.7)}}
+.pending-bar .icon{font-size:20px}
+.pending-bar .text{flex:1}
+.pending-bar .text .title{font-weight:600;color:var(--accent-orange);font-size:13px}
+.pending-bar .text .question{color:var(--text-secondary);font-size:12px;margin-top:2px}
+
+/* Input */
+.chat-input-area{border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:10px;flex-shrink:0;background:var(--bg-secondary)}
+.chat-input-area input{flex:1;padding:10px 14px;font-size:14px}
+.chat-input-hint{font-size:11px;color:var(--text-muted);padding:4px 16px 0;flex-shrink:0;background:var(--bg-secondary)}
+
+/* ====== SIDE PANEL (right) ====== */
+.side-panel{width:450px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-secondary);overflow:hidden}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-tab{flex:1;padding:10px 0;text-align:center;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent;transition:all 0.15s;user-select:none}
+.panel-tab:hover{color:var(--text-primary);background:var(--bg-tertiary)}
+.panel-tab.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue)}
+.panel-tab .count{margin-left:4px;opacity:0.7;background:var(--bg-tertiary);padding:1px 6px;border-radius:8px;font-size:10px}
+.panel-content{flex:1;overflow-y:auto;padding:12px}
+.panel-content::-webkit-scrollbar{width:6px}
+.panel-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.panel-section{display:none}
+.panel-section.active{display:block}
+
+/* ====== PREFERENCES TABLE (editable) ====== */
+.pref-table{width:100%;border-collapse:collapse;font-size:11px}
+.pref-table th{text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);color:var(--text-muted);font-weight:500;position:sticky;top:0;background:var(--bg-secondary);z-index:1}
+.pref-table td{padding:5px 8px;border-bottom:1px solid rgba(48,54,61,0.4);vertical-align:middle}
+.pref-table tr:hover td{background:rgba(88,166,255,0.04)}
+.pref-table .pref-name{color:var(--accent-cyan);font-weight:500}
+.pref-table .pref-value{color:var(--accent-blue);font-weight:600}
+.pref-table .pref-condition{color:var(--text-secondary);font-size:10px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+.pref-table .pref-status{text-transform:uppercase;font-size:10px;font-weight:600}
+.pref-table .pref-status.active{color:var(--accent-green)}
+.pref-table .pref-status.expired{color:var(--accent-red);text-decoration:line-through}
+.pref-table .actions{display:flex;gap:4px}
+.pref-table .actions .btn{padding:1px 6px;font-size:10px}
+
+/* Edit modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center}
+.modal-overlay.hidden{display:none}
+.modal-box{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;width:420px;max-width:95%;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.modal-box h3{font-size:15px;margin-bottom:16px;color:var(--accent-purple)}
+.modal-box .form-group{margin-bottom:12px}
+.modal-box .form-group label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase}
+.modal-box .form-group input,.modal-box .form-group select,.modal-box .form-group textarea{width:100%}
+.modal-box .form-group textarea{min-height:60px;resize:vertical}
+.modal-box .form-row{display:flex;gap:10px}
+.modal-box .form-row .form-group{flex:1}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+
+/* ====== DEMO PANEL ====== */
+.demo-block{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.demo-block h4{font-size:13px;color:var(--accent-purple);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.progress-bar{height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;margin:10px 0}
+.progress-bar .fill{height:100%;background:linear-gradient(90deg,var(--accent-purple),var(--accent-blue));border-radius:3px;transition:width 0.5s ease}
+.demo-steps{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.demo-step-item{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;border-radius:4px;background:var(--bg-primary)}
+.demo-step-item.done .step-num{color:var(--accent-green)}
+.demo-step-item.running .step-num{color:var(--accent-blue);animation:pulse 1s infinite}
+.demo-step-item .step-num{width:20px;text-align:center;font-weight:600;font-size:11px;color:var(--text-muted)}
+.demo-step-item .step-label{flex:1;color:var(--text-secondary)}
+.demo-step-item.done .step-label{color:var(--text-primary)}
+.demo-step-item.running .step-label{color:var(--accent-blue)}
+.demo-step-item .step-result{font-size:10px;color:var(--text-muted)}
+
+.demo-results{margin-top:12px}
+.demo-result-item{padding:8px 10px;margin-bottom:6px;border-radius:4px;font-size:11px;border-left:3px solid var(--border);background:var(--bg-primary)}
+.demo-result-item.learned{border-color:var(--accent-purple)}
+.demo-result-item.expired{border-color:var(--accent-red)}
+.demo-result-item.acted{border-color:var(--accent-green)}
+.demo-result-item .lbl{color:var(--text-muted);font-size:10px}
+
+/* ====== TRACE PANEL ====== */
+.trace-block{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px}
+.trace-block h4{font-size:12px;color:var(--accent-purple);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.trace-row{display:flex;margin-bottom:4px;font-size:11px}
+.trace-row .key{color:var(--text-muted);min-width:80px;flex-shrink:0}
+.trace-row .val{color:var(--text-primary);word-break:break-all}
+.trace-json{background:var(--bg-primary);border-radius:4px;padding:8px 10px;font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);overflow-x:auto;white-space:pre-wrap;max-height:160px;overflow-y:auto;line-height:1.4}
+.trace-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:30px 0}
+.dim-tag{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;font-size:10px;background:var(--bg-tertiary);border:1px solid var(--border)}
+.dim-tag.missing{border-color:var(--accent-orange);color:var(--accent-orange)}
+.dim-tag.found{border-color:var(--accent-green);color:var(--accent-green)}
+
+/* ====== LEARNING PANEL ====== */
+.learning-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;animation:slideIn 0.3s ease-out}
+.learning-card.learned{border-left:3px solid var(--accent-purple)}
+.learning-card.learned h4{color:var(--accent-purple)}
+.learning-card.expired{border-left:3px solid var(--accent-red);opacity:0.8}
+.learning-card.expired h4{color:var(--accent-red)}
+.learning-card h4{font-size:12px;margin-bottom:8px}
+.learning-card .field{margin-bottom:3px;font-size:11px;display:flex}
+.learning-card .field .key{color:var(--text-muted);min-width:50px}
+.learning-card .field .val{color:var(--text-primary)}
+.learning-card .time{font-size:10px;color:var(--text-muted);margin-top:4px}
+
+/* ====== EMPTY STATE ====== */
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px}
+.empty-state .icon{font-size:36px;margin-bottom:12px;opacity:0.5;display:block}
+
+/* ====== TOAST ====== */
+.toast-container{position:fixed;top:56px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:10px 16px;border-radius:var(--radius);font-size:12px;animation:toastIn 0.3s ease-out;max-width:360px;box-shadow:var(--shadow);pointer-events:auto}
+.toast.success{background:#1a3a1a;border:1px solid var(--accent-green);color:var(--accent-green)}
+.toast.error{background:#3a1a1a;border:1px solid var(--accent-red);color:var(--accent-red)}
+.toast.info{background:#1a2a3a;border:1px solid var(--accent-blue);color:var(--accent-blue)}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent-blue);border-radius:50%;animation:spin 0.6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ====== RESPONSIVE ====== */
+@media(max-width:900px){.main{flex-direction:column}.side-panel{width:100%;max-height:42%}.header{flex-wrap:wrap;gap:6px;padding:6px 10px}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-logo">🚗 CMARA Demo<span>| 车载长期记忆</span></div>
+  <div class="status-dot offline" id="healthDot" title="服务器状态"></div>
+  <span style="font-size:11px;color:var(--text-muted)" id="healthLabel">未连接</span>
+  <div class="header-spacer"></div>
+  <input type="text" id="serverUrl" value="http://127.0.0.1:8010" style="width:210px;font-family:var(--font-mono)" title="API 地址">
+  <button class="btn" onclick="checkHealth()">🔗 连接</button>
+  <button class="btn accent" onclick="showDemoPanel()">▶ 快速演示</button>
+  <button class="btn success" onclick="doSummarize()">📊 Summarize</button>
+  <button class="btn danger" onclick="doReset()">🔄 Reset</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- CHAT PANEL -->
+  <div class="chat-panel">
+    <div class="chat-messages" id="chatMessages">
+      <div class="msg system"><div class="msg-bubble">
+👋 欢迎使用 CMARA 车载长期记忆 Demo<br><br>
+<b>核心演示:</b> 记住偏好 → 信息不足时追问 → 学到新偏好 → 下次复用<br><br>
+💡 试试输入 "好热啊" 体验偏好检索与决策<br>
+🚀 或点击 <b>▶ 快速演示</b> 自动运行完整场景
+      </div></div>
+    </div>
+    <div class="pending-bar" id="pendingBar" style="display:none">
+      <div class="icon">⚠️</div>
+      <div class="text"><div class="title">⏳ 请回答追问</div><div class="question" id="pendingQuestion"></div></div>
+      <button class="btn danger sm" onclick="cancelPending()">✕</button>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="userInput" placeholder="输入你的需求..." autocomplete="off" autofocus>
+      <button class="btn primary" id="sendBtn" onclick="sendMessage()">发送</button>
+    </div>
+    <div class="chat-input-hint" id="inputHint">💡 试试输入："周末一家人出去玩，好热啊。"</div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active" data-tab="preferences" onclick="switchTab('preferences')">📋 偏好表<span class="count" id="prefCount">0</span></div>
+      <div class="panel-tab" data-tab="trace" onclick="switchTab('trace')">🔍 决策 Trace</div>
+      <div class="panel-tab" data-tab="learning" onclick="switchTab('learning')">🧠 学习记录</div>
+    </div>
+    <div class="panel-content">
+      <div class="panel-section active" id="section-preferences">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--text-muted)">双击行编辑 | 点击 ✕ 删除</span>
+          <button class="btn sm success" onclick="loadPreferences()" title="刷新">🔄 刷新</button>
+        </div>
+        <div id="prefContent"></div>
+      </div>
+      <div class="panel-section" id="section-trace">
+        <div id="traceContent"><div class="trace-empty">📭 发送消息后显示决策过程</div></div>
+      </div>
+      <div class="panel-section" id="section-learning">
+        <div id="learningContent"><div class="empty-state"><span class="icon">🧠</span><div>暂无学习记录</div></div></div>
+      </div>
+      <!-- Demo panel (shown during/after demo) -->
+      <div class="panel-section" id="section-demo">
+        <div id="demoContent"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay hidden" id="editModal">
+  <div class="modal-box">
+    <h3>✏️ 编辑偏好 #<span id="editId"></span></h3>
+    <div class="form-row">
+      <div class="form-group"><label>偏好名称</label><input type="text" id="editPreference"></div>
+      <div class="form-group"><label>值</label><input type="text" id="editValue"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>条件类型</label><input type="text" id="editCondType" placeholder="default / health_state / ..."></div>
+      <div class="form-group"><label>条件目标</label><input type="text" id="editCondTarget" placeholder="sick / recovering / ..."></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>状态</label><select id="editStatus"><option value="active">active</option><option value="expired">expired</option></select></div>
+      <div class="form-group"><label>来源</label><select id="editSource"><option value="user_stated">user_stated</option><option value="offline_summary">offline_summary</option><option value="learned_from_clarification">learned_from_clarification</option></select></div>
+    </div>
+    <div class="form-group"><label>依据 (evidence)</label><textarea id="editEvidence" rows="2"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeEditModal()">取消</button>
+      <button class="btn primary" onclick="saveEdit()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  serverUrl: localStorage.getItem('cmara_server_url') || 'http://127.0.0.1:8010',
+  pendingId: null, pendingQuestion: null,
+  learnedHistory: [], lastTrace: null, demoRunning: false,
+  editingId: null,
+};
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('serverUrl').value = state.serverUrl;
+  setTimeout(checkHealth, 500);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('userInput')) {
+    e.preventDefault(); sendMessage();
+  }
+});
+
+// ============================================================
+// API
+// ============================================================
+function apiUrl(path) { return state.serverUrl.replace(/\/+$/, '') + path; }
+async function apiCall(method, path, body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const resp = await fetch(apiUrl(path), opts);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+// ============================================================
+// HEALTH
+// ============================================================
+async function checkHealth() {
+  const url = document.getElementById('serverUrl').value.trim();
+  if (url) { state.serverUrl = url; localStorage.setItem('cmara_server_url', url); }
+  const dot = document.getElementById('healthDot'), label = document.getElementById('healthLabel');
+  dot.className = 'status-dot checking'; label.textContent = '检测中...';
+  try {
+    const data = await apiCall('GET', '/health');
+    dot.className = 'status-dot online'; label.textContent = `在线 (${data.session_id})`;
+    toast('✅ 服务器连接成功', 'success'); loadPreferences();
+  } catch (e) {
+    dot.className = 'status-dot offline'; label.textContent = '离线';
+    toast('❌ 无法连接: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// SEND MESSAGE
+// ============================================================
+async function sendMessage() {
+  if (state.demoRunning) return;
+  const input = document.getElementById('userInput'), text = input.value.trim();
+  if (!text) return;
+  if (state.pendingId) { await sendClarification(text); input.value = ''; return; }
+  addChatMessage('user', text); input.value = ''; setSending(true);
+  try {
+    const data = await apiCall('POST', '/turn', { text, session_id: 'default' });
+    handleTurnResult(data);
+  } catch (e) {
+    addChatMessage('system', `❌ ${e.message}`);
+    toast('请求失败: ' + e.message, 'error');
+  } finally { setSending(false); }
+}
+
+async function sendClarification(answer) {
+  if (!state.pendingId) return;
+  addChatMessage('user', answer, [{ text: '回答追问', cls: 'replied' }]);
+  setSending(true); hidePendingBar();
+  const pid = state.pendingId; state.pendingId = null; state.pendingQuestion = null;
+  try {
+    const data = await apiCall('POST', '/clarification', { session_id: 'default', pending_id: pid, answer });
+    handleTurnResult(data);
+  } catch (e) {
+    addChatMessage('system', `❌ ${e.message}`);
+  } finally { setSending(false); }
+}
+
+// ============================================================
+// HANDLE TURN RESULT
+// ============================================================
+function handleTurnResult(data) {
+  const status = data.status;
+  let statusClass, statusText;
+  if (status === 'acted') { statusClass = 'acted'; statusText = 'ACTED · 已执行'; }
+  else if (status === 'replied') { statusClass = 'replied'; statusText = 'REPLIED · 已回复'; }
+  else { statusClass = 'needs_user_input'; statusText = 'NEEDS INPUT · 等待追问'; }
+
+  let content = data.assistant_text || '(无回复)';
+  const badges = [{ text: statusText, cls: statusClass }];
+  const d = data.decision || {};
+
+  if ((status === 'acted' || status === 'replied') && d.tool_name && d.tool_name !== 'general_chat' && d.tool_name !== 'none') {
+    content += `\n\n🔧 ${d.tool_name}(${JSON.stringify(d.tool_args || {})})`;
+    if (d.rationale) content += `\n💭 ${d.rationale}`;
+  }
+
+  addChatMessage('assistant', content, badges);
+
+  if (status === 'needs_user_input' && data.pending) {
+    state.pendingId = data.pending.pending_id;
+    state.pendingQuestion = data.pending.question;
+    showPendingBar(data.pending.question);
+    document.getElementById('inputHint').textContent = '💬 请输入回答回应系统的追问...';
+  } else {
+    state.pendingId = null; state.pendingQuestion = null;
+    document.getElementById('inputHint').textContent = '💡 继续输入你的需求，或点击 ▶ 快速演示...';
+  }
+
+  if (data.learned_preference) {
+    state.learnedHistory.push({ type: 'learned', data: data.learned_preference, timestamp: new Date().toISOString() });
+    const lp = data.learned_preference;
+    addChatMessage('system', `🧠 学到新偏好: ${lp.preference} = ${lp.value}`, [{ text: 'NEW', cls: 'learned' }]);
+    renderLearning(); switchTab('learning');
+  }
+  if (data.expired_preferences && data.expired_preferences.length > 0) {
+    for (const p of data.expired_preferences) {
+      state.learnedHistory.push({ type: 'expired', data: p, timestamp: new Date().toISOString() });
+      addChatMessage('system', `⌛ 偏好过期: ${p.preference} = ${p.value}`, [{ text: 'EXPIRED', cls: 'expired' }]);
+    }
+    renderLearning();
+  }
+  if (data.decision_trace) { state.lastTrace = data.decision_trace; renderTrace(data.decision_trace); }
+  loadPreferences();
+}
+
+// ============================================================
+// CHAT UI
+// ============================================================
+function addChatMessage(role, content, badges = []) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const labels = { user: '👤 你', assistant: '🤖 CMARA', system: '📢 系统' };
+  const lb = document.createElement('div'); lb.className = 'msg-label'; lb.textContent = labels[role] || role;
+  div.appendChild(lb);
+  const bb = document.createElement('div'); bb.className = 'msg-bubble'; bb.textContent = content;
+  div.appendChild(bb);
+  if (badges.length) {
+    const m = document.createElement('div'); m.className = 'msg-meta';
+    badges.forEach(b => { const s = document.createElement('span'); s.className = `badge ${b.cls}`; s.textContent = b.text; m.appendChild(s); });
+    div.appendChild(m);
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showPendingBar(q) { document.getElementById('pendingQuestion').textContent = q; document.getElementById('pendingBar').style.display = 'flex'; }
+function hidePendingBar() { document.getElementById('pendingBar').style.display = 'none'; }
+function cancelPending() { state.pendingId = null; state.pendingQuestion = null; hidePendingBar(); document.getElementById('inputHint').textContent = '💡 继续输入...'; addChatMessage('system', '✕ 已取消等待'); }
+function setSending(s) { document.getElementById('sendBtn').disabled = s; document.getElementById('userInput').disabled = s; }
+setInterval(() => {
+  const b = document.getElementById('sendBtn'), inp = document.getElementById('userInput');
+  if (b.disabled) return;
+  if (state.pendingId) { b.textContent = '回答'; b.style.background = 'var(--accent-orange)'; b.style.borderColor = 'var(--accent-orange)'; b.style.color = '#fff'; inp.placeholder = '输入你的回答...'; }
+  else { b.textContent = '发送'; b.style.background = ''; b.style.borderColor = ''; b.style.color = ''; inp.placeholder = '输入你的需求...'; }
+}, 300);
+
+// ============================================================
+// PREFERENCES (editable)
+// ============================================================
+async function loadPreferences() {
+  try {
+    const data = await apiCall('GET', '/preferences');
+    renderPreferences(data.preferences || []);
+    document.getElementById('prefCount').textContent = data.count || 0;
+  } catch (e) {}
+}
+
+function renderPreferences(prefs) {
+  const container = document.getElementById('prefContent');
+  document.getElementById('prefCount').textContent = prefs.length;
+  if (!prefs.length) {
+    container.innerHTML = '<div class="empty-state"><span class="icon">📋</span><div>暂无偏好</div></div>';
+    return;
+  }
+  let html = '<table class="pref-table"><tr><th>#</th><th>偏好</th><th>值</th><th>条件</th><th>状态</th><th>操作</th></tr>';
+  for (const p of prefs) {
+    const c = p.condition || {};
+    const ct = c.type === 'default' ? '默认' : [c.type, c.operator, c.target].filter(x => x != null).join(' ');
+    html += `<tr>
+      <td style="color:var(--text-muted)">#${p.id}</td>
+      <td class="pref-name">${esc(p.preference)}</td>
+      <td class="pref-value">${esc(String(p.value))}</td>
+      <td><span class="pref-condition" title="${esc(JSON.stringify(c))}">${esc(ct)}</span></td>
+      <td class="pref-status ${p.status}">${p.status}</td>
+      <td class="actions">
+        <button class="btn sm" onclick="openEditModal(${p.id},${escJS(JSON.stringify(p))})" title="编辑">✏️</button>
+        <button class="btn sm danger" onclick="deletePreference(${p.id})" title="删除">✕</button>
+      </td>
+    </tr>`;
+  }
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+function openEditModal(id, jsonStr) {
+  const p = JSON.parse(jsonStr);
+  state.editingId = id;
+  document.getElementById('editId').textContent = id;
+  document.getElementById('editPreference').value = p.preference || '';
+  document.getElementById('editValue').value = p.value ?? '';
+  const c = p.condition || {};
+  document.getElementById('editCondType').value = c.type || 'default';
+  document.getElementById('editCondTarget').value = c.target ?? '';
+  document.getElementById('editStatus').value = p.status || 'active';
+  document.getElementById('editSource').value = p.source || 'user_stated';
+  document.getElementById('editEvidence').value = p.evidence || '';
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); state.editingId = null; }
+
+async function saveEdit() {
+  if (!state.editingId) return;
+  const body = {
+    id: state.editingId,
+    preference: document.getElementById('editPreference').value.trim(),
+    value: document.getElementById('editValue').value.trim(),
+    condition: {
+      type: document.getElementById('editCondType').value.trim() || 'default',
+      operator: document.getElementById('editCondTarget').value.trim() ? '==' : null,
+      target: document.getElementById('editCondTarget').value.trim() || null,
+    },
+    status: document.getElementById('editStatus').value,
+    source: document.getElementById('editSource').value,
+    evidence: document.getElementById('editEvidence').value.trim(),
+    session_id: 'default',
+  };
+  // Clean null fields from condition
+  for (const k of Object.keys(body.condition)) { if (body.condition[k] == null || body.condition[k] === '') delete body.condition[k]; }
+  if (!body.condition.type) body.condition = { type: 'default' };
+
+  try {
+    await apiCall('POST', '/preferences/update', body);
+    toast('✅ 偏好已更新', 'success');
+    closeEditModal();
+    loadPreferences();
+  } catch (e) {
+    toast('❌ 更新失败: ' + e.message, 'error');
+  }
+}
+
+async function deletePreference(id) {
+  if (!confirm(`确定删除偏好 #${id}？`)) return;
+  try {
+    await apiCall('POST', '/preferences/delete', { id, session_id: 'default' });
+    toast('🗑️ 偏好已删除', 'info');
+    loadPreferences();
+  } catch (e) {
+    toast('❌ 删除失败: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// TRACE PANEL
+// ============================================================
+function renderTrace(trace) {
+  const c = document.getElementById('traceContent');
+  if (!trace) { c.innerHTML = '<div class="trace-empty">📭 暂无决策 Trace</div>'; return; }
+  const d = trace.decision || {};
+  let h = '';
+  h += `<div class="trace-block"><h4>🎯 决策</h4>
+    <div class="trace-row"><span class="key">动作</span><span class="val"><span class="badge ${d.action==='ACT'?'acted':'needs_user_input'}">${d.action||'?'}</span></span></div>
+    <div class="trace-row"><span class="key">工具</span><span class="val">${esc(d.tool_name||'-')}</span></div>
+    <div class="trace-row"><span class="key">参数</span><span class="val"><code>${esc(JSON.stringify(d.tool_args||{}))}</code></span></div>`;
+  if (d.rationale) h += `<div class="trace-row"><span class="key">理由</span><span class="val">${esc(d.rationale)}</span></div>`;
+  if (d.question) h += `<div class="trace-row"><span class="key">追问</span><span class="val" style="color:var(--accent-orange)">${esc(d.question)}</span></div>`;
+  h += '</div>';
+
+  if (trace.dimensions) {
+    h += '<div class="trace-block"><h4>📝 上下文维度</h4>';
+    for (const [k,v] of Object.entries(trace.dimensions)) {
+      const vv = v==null||v===''?'unknown':String(v);
+      h += `<span class="dim-tag ${vv==='unknown'?'missing':'found'}">${esc(k)}: ${esc(vv)}</span>`;
+    }
+    h += '</div>';
+  }
+
+  if (trace.retrieved_preferences && trace.retrieved_preferences.length) {
+    h += `<div class="trace-block"><h4>📥 召回偏好 (${trace.retrieved_preferences.length})</h4>`;
+    for (const p of trace.retrieved_preferences) {
+      h += `<div style="font-size:11px;margin-bottom:4px;padding:4px 6px;background:var(--bg-primary);border-radius:3px;display:flex;justify-content:space-between">
+        <span><span style="color:var(--accent-cyan)">${esc(p.preference)}</span>=<span style="color:var(--accent-blue)">${esc(String(p.value))}</span></span>
+        <span style="font-size:10px;color:var(--text-muted)">score:${p.total_score??p.retrieval_score??'?'}</span></div>`;
+    }
+    h += '</div>';
+  }
+
+  if (trace.retrieval_hits && trace.retrieval_hits.length) {
+    h += `<div class="trace-block"><h4>🧩 LightMem 命中</h4>`;
+    for (const hit of trace.retrieval_hits.slice(0,6)) {
+      h += `<div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px;border-bottom:1px solid rgba(48,54,61,0.2);padding:2px 0">[${esc(String(hit.score??'?'))}] ${esc((hit.memory||'').substring(0,100))}</div>`;
+    }
+    h += '</div>';
+  }
+
+  if (trace.learned_preference) h += `<div class="trace-block" style="border-left:3px solid var(--accent-purple)"><h4 style="color:var(--accent-purple)">🧠 学到</h4><div class="trace-json">${esc(JSON.stringify(trace.learned_preference,null,2))}</div></div>`;
+  if (trace.expired_preferences && trace.expired_preferences.length) h += `<div class="trace-block" style="border-left:3px solid var(--accent-red)"><h4 style="color:var(--accent-red)">⌛ 过期</h4><div class="trace-json">${esc(JSON.stringify(trace.expired_preferences,null,2))}</div></div>`;
+
+  h += `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">📄 原始 JSON</summary><div class="trace-json" style="margin-top:6px;max-height:300px">${esc(JSON.stringify(trace,null,2))}</div></details>`;
+  c.innerHTML = h;
+}
+
+// ============================================================
+// LEARNING PANEL
+// ============================================================
+function renderLearning() {
+  const c = document.getElementById('learningContent');
+  if (!state.learnedHistory.length) {
+    c.innerHTML = '<div class="empty-state"><span class="icon">🧠</span><div>暂无学习记录</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">通过追问或离线总结触发</div></div>';
+    return;
+  }
+  let h = '';
+  for (let i = state.learnedHistory.length - 1; i >= 0; i--) {
+    const item = state.learnedHistory[i], d = item.data, cond = d.condition || {};
+    const ct = cond.type === 'default' ? '默认' : `${cond.type||''} ${cond.operator||''} ${cond.target!=null?cond.target:''}`.trim();
+    if (item.type === 'learned') {
+      h += `<div class="learning-card learned"><h4>🧠 学到新偏好</h4>
+        <div class="field"><span class="key">偏好</span><span class="val" style="color:var(--accent-cyan)">${esc(d.preference)}</span></div>
+        <div class="field"><span class="key">值</span><span class="val" style="color:var(--accent-blue);font-weight:600">${esc(String(d.value))}</span></div>
+        <div class="field"><span class="key">条件</span><span class="val">${esc(ct)}</span></div>
+        <div class="field"><span class="key">来源</span><span class="val">${esc((d.source||'?').replace(/_/g,' '))}</span></div>
+        ${d.evidence?`<div class="field"><span class="key">依据</span><span class="val" style="font-size:10px;color:var(--text-muted)">${esc(d.evidence)}</span></div>`:''}
+        <div class="time">${new Date(item.timestamp).toLocaleTimeString()}</div></div>`;
+    } else {
+      h += `<div class="learning-card expired"><h4>⌛ 偏好过期</h4>
+        <div class="field"><span class="key">偏好</span><span class="val" style="text-decoration:line-through">${esc(d.preference)}</span></div>
+        <div class="field"><span class="key">值</span><span class="val" style="text-decoration:line-through">${esc(String(d.value))}</span></div>
+        <div class="field"><span class="key">条件</span><span class="val">${esc(ct)}</span></div>
+        <div class="time">${new Date(item.timestamp).toLocaleTimeString()}</div></div>`;
+    }
+  }
+  c.innerHTML = h;
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel-section').forEach(s => s.classList.remove('active'));
+  const tab = document.querySelector(`[data-tab="${name}"]`);
+  if (tab) tab.classList.add('active');
+  const sec = document.getElementById(`section-${name}`);
+  if (sec) sec.classList.add('active');
+}
+
+// ============================================================
+// SUMMARIZE / RESET
+// ============================================================
+async function doSummarize() {
+  if (state.demoRunning) return;
+  try {
+    setSending(true);
+    addChatMessage('system', '📊 正在离线抽取偏好...');
+    const data = await apiCall('POST', '/summarize', { session_id: 'default' });
+    toast(`✅ 新增 ${data.count} 条偏好`, 'success');
+    if (data.added_preferences) for (const p of data.added_preferences) {
+      state.learnedHistory.push({ type: 'learned', data: p, timestamp: new Date().toISOString() });
+      addChatMessage('system', `📊 离线抽取: ${p.preference} = ${p.value}`, [{ text: 'OFFLINE', cls: 'learned' }]);
+    }
+    renderLearning(); loadPreferences(); switchTab('learning');
+  } catch(e) { toast('❌ ' + e.message, 'error'); } finally { setSending(false); }
+}
+
+async function doReset() {
+  if (state.demoRunning) return;
+  if (!confirm('确定清空所有数据？')) return;
+  try {
+    setSending(true);
+    await apiCall('POST', '/reset', { session_id: 'default' });
+    state.pendingId = null; state.pendingQuestion = null; state.learnedHistory = []; state.lastTrace = null;
+    hidePendingBar();
+    document.getElementById('chatMessages').innerHTML = '<div class="msg system"><div class="msg-bubble">🔄 已重置，可以开始新对话</div></div>';
+    renderPreferences([]); renderTrace(null); renderLearning();
+    document.getElementById('prefCount').textContent = '0';
+    document.getElementById('inputHint').textContent = '💡 试试："周末一家人出去玩，好热啊。"';
+    toast('🔄 已重置', 'info');
+  } catch(e) { toast('❌ ' + e.message, 'error'); } finally { setSending(false); }
+}
+
+// ============================================================
+// QUICK DEMO (progress bar style)
+// ============================================================
+function showDemoPanel() {
+  // Add demo tab if not exists
+  if (!document.querySelector('[data-tab="demo"]')) {
+    const tabs = document.querySelector('.panel-tabs');
+    const tab = document.createElement('div');
+    tab.className = 'panel-tab'; tab.dataset.tab = 'demo';
+    tab.textContent = '🚀 演示';
+    tab.onclick = () => switchTab('demo');
+    tabs.appendChild(tab);
+  }
+  switchTab('demo');
+  renderDemoPanel('idle');
+}
+
+function renderDemoPanel(status) {
+  const c = document.getElementById('demoContent');
+  if (status === 'idle') {
+    c.innerHTML = `<div class="demo-block">
+      <h4>🚀 家庭出游场景演示</h4>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">模拟三天家庭出游，展示完整闭环：<br>
+      <b>Day 1</b> 对话 → 总结偏好 | <b>Day 2</b> 追问 → 学习 | <b>Day 9</b> 直接执行</p>
+      <div style="margin-bottom:10px;font-size:11px;color:var(--text-muted)">
+        ⚡ 演示过程不会在聊天区刷屏，结果会显示在这里
+      </div>
+      <button class="btn primary" onclick="runQuickDemo()">▶ 开始演示</button>
+    </div>`;
+    return;
+  }
+  if (status === 'running') {
+    const steps = state.demoSteps || [];
+    const done = state.demoDone || 0;
+    const pct = steps.length ? Math.round(done / steps.length * 100) : 0;
+    let h = `<div class="demo-block">
+      <h4>🚀 演示运行中...</h4>
+      <div class="progress-bar"><div class="fill" style="width:${pct}%"></div></div>
+      <div style="text-align:center;font-size:11px;color:var(--text-muted);margin-bottom:10px">${done}/${steps.length} 步 · ${pct}%</div>
+      <div class="demo-steps">`;
+    for (let i = 0; i < steps.length; i++) {
+      let cls = '';
+      if (i < done) cls = 'done';
+      else if (i === done) cls = 'running';
+      h += `<div class="demo-step-item ${cls}">
+        <span class="step-num">${i < done ? '✅' : i === done ? '⏳' : i + 1}</span>
+        <span class="step-label">${steps[i]}</span>
+        <span class="step-result">${state.demoStepResults?.[i] || ''}</span>
+      </div>`;
+    }
+    h += '</div></div>';
+    c.innerHTML = h;
+    return;
+  }
+  if (status === 'done') {
+    const results = state.demoResults || {};
+    let h = `<div class="demo-block">
+      <h4>✅ 演示完成！</h4>
+      <div class="progress-bar"><div class="fill" style="width:100%"></div></div>
+      <div style="text-align:center;font-size:12px;color:var(--accent-green);margin:8px 0">全部步骤已完成</div>`;
+
+    if (results.learned && results.learned.length) {
+      h += '<div class="demo-results"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">🧠 学到的偏好:</div>';
+      for (const p of results.learned) {
+        h += `<div class="demo-result-item learned"><span class="lbl">+</span> <b>${esc(p.preference)}</b> = ${esc(String(p.value))} @ ${esc(JSON.stringify(p.condition||{}))}</div>`;
+      }
+      h += '</div>';
+    }
+    if (results.expired && results.expired.length) {
+      h += '<div class="demo-results"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">⌛ 过期的偏好:</div>';
+      for (const p of results.expired) {
+        h += `<div class="demo-result-item expired"><span class="lbl">-</span> <b>${esc(p.preference)}</b> = ${esc(String(p.value))}</div>`;
+      }
+      h += '</div>';
+    }
+    if (results.day9Status) {
+      h += `<div class="demo-result-item acted"><span class="lbl">✅</span> Day 9 结果: <b>${results.day9Status}</b> — 偏好已复用，不再追问！</div>`;
+    }
+    h += `<div style="margin-top:10px"><button class="btn accent" onclick="showDemoPanel()">🔄 重新演示</button></div>`;
+    h += '</div>';
+    c.innerHTML = h;
+  }
+}
+
+async function runQuickDemo() {
+  if (state.demoRunning) return;
+  state.demoRunning = true;
+  state.demoSteps = ['初始化环境', 'Day 1 对话', '离线总结 Day 1', 'Day 2: "好热啊"', 'Day 2: 回答追问', 'Day 9: 相似场景'];
+  state.demoDone = 0;
+  state.demoStepResults = [];
+  state.demoResults = { learned: [], expired: [], day9Status: '' };
+  renderDemoPanel('running');
+  document.getElementById('chatMessages').innerHTML = '<div class="msg system"><div class="msg-bubble">🚀 演示运行中，请查看右侧 <b>🚀 演示</b> 面板...</div></div>';
+
+  try {
+    // Step 0: Reset
+    await apiCall('POST', '/reset', { session_id: 'default' });
+    state.demoDone = 1; state.demoStepResults[0] = 'OK'; renderDemoPanel('running');
+
+    // Step 1: Day 1 messages
+    const msgs = ['周末我们一家人准备去海边玩！', '我喜欢听爵士乐，轻松一点的。', '天气这么热，空调开25度比较舒服。', '带上泳衣和防晒霜！'];
+    for (const m of msgs) {
+      const r = await apiCall('POST', '/turn', { text: m, session_id: 'default' });
+      if (r.status === 'needs_user_input' && r.pending) {
+        await apiCall('POST', '/clarification', { session_id: 'default', pending_id: r.pending.pending_id, answer: '嗯好的。' });
+      }
+    }
+    state.demoDone = 2; state.demoStepResults[1] = `${msgs.length} 轮对话完成`; renderDemoPanel('running');
+
+    // Step 2: Summarize
+    const sum = await apiCall('POST', '/summarize', { session_id: 'default' });
+    if (sum.added_preferences) for (const p of sum.added_preferences) state.demoResults.learned.push(p);
+    state.demoDone = 3; state.demoStepResults[2] = `+${sum.count} 条偏好`; renderDemoPanel('running');
+
+    // Step 3: Day 2 "好热啊"
+    const d2 = await apiCall('POST', '/turn', { text: '好热啊，快开空调。', session_id: 'default' });
+    let pendingId = null;
+    if (d2.status === 'needs_user_input' && d2.pending) {
+      pendingId = d2.pending.pending_id;
+      state.demoStepResults[3] = '触发追问 ✓';
+    } else {
+      state.demoStepResults[3] = d2.status;
+    }
+    state.demoDone = 4; renderDemoPanel('running');
+
+    // Step 4: Answer clarification
+    if (pendingId) {
+      const clar = await apiCall('POST', '/clarification', {
+        session_id: 'default', pending_id: pendingId,
+        answer: '好多了，感冒已经好了，今天基本恢复了。',
+      });
+      if (clar.learned_preference) state.demoResults.learned.push(clar.learned_preference);
+      if (clar.expired_preferences) for (const p of clar.expired_preferences) state.demoResults.expired.push(p);
+      state.demoStepResults[4] = clar.learned_preference ? `学到: ${clar.learned_preference.preference}=${clar.learned_preference.value}` : '已执行';
+    } else {
+      state.demoStepResults[4] = '未触发追问';
+    }
+    state.demoDone = 5; renderDemoPanel('running');
+
+    // Step 5: Day 9
+    const d9 = await apiCall('POST', '/turn', { text: '今天也好热啊，空调开一下。', session_id: 'default' });
+    state.demoResults.day9Status = d9.status === 'acted' ? 'ACTED · 直接执行，不再追问' : d9.status;
+    state.demoStepResults[5] = d9.status === 'acted' ? '直接执行 ✓' : d9.status;
+    state.demoDone = 6; renderDemoPanel('running');
+
+    // Done
+    state.demoDone = 6;
+    // Also add learned to global state for learning panel
+    for (const p of state.demoResults.learned) {
+      state.learnedHistory.push({ type: 'learned', data: p, timestamp: new Date().toISOString() });
+    }
+    for (const p of state.demoResults.expired) {
+      state.learnedHistory.push({ type: 'expired', data: p, timestamp: new Date().toISOString() });
+    }
+    renderLearning(); loadPreferences();
+    if (state.lastTrace) renderTrace(state.lastTrace);
+
+    addChatMessage('system', `✅ 演示完成！查看右侧面板查看详情。\nDay 9 结果: ${state.demoResults.day9Status}`, [{ text: 'DONE', cls: 'acted' }]);
+    renderDemoPanel('done');
+  } catch (e) {
+    addChatMessage('system', `❌ 演示中断: ${e.message}`);
+    renderDemoPanel('idle');
+    toast('演示失败: ' + e.message, 'error');
+  }
+  state.demoRunning = false;
+  document.getElementById('inputHint').textContent = '✅ 演示完成！你可以继续自由对话';
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function toast(msg, type = 'info') {
+  const ct = document.getElementById('toastContainer');
+  const d = document.createElement('div'); d.className = `toast ${type}`; d.textContent = msg;
+  ct.appendChild(d);
+  setTimeout(() => { d.style.opacity = '0'; d.style.transition = 'opacity 0.3s'; setTimeout(() => d.remove(), 300); }, 3500);
+}
+function esc(s) { if (s == null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escJS(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+</script>
+</body>
+</html>
