@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vehicle Memory Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Vehicle Memory Demo</p>
+          <h1>车载长期记忆演示台</h1>
+          <p class="summary">
+            用一页界面把“记住偏好、主动追问、澄清后学习、下次减少重复追问”完整演出来。
+          </p>
+        </div>
+
+        <section class="hero-panel">
+          <img
+            src="./assets/family-trip-hero.png"
+            alt="家庭出游车载记忆演示场景"
+          />
+          <div class="hero-copy">
+            <span class="hero-chip">Family Trip Loop</span>
+            <p>家庭出游、体感过热、健康状态澄清、偏好更新与复用。</p>
+          </div>
+        </section>
+
+        <section class="panel controls-panel">
+          <div class="panel-header">
+            <h2>连接与控制</h2>
+            <span id="connection-badge" class="badge pending">未检测</span>
+          </div>
+
+          <label class="field">
+            <span>API 地址</span>
+            <input id="api-base" type="text" value="http://127.0.0.1:8010" />
+          </label>
+
+          <div class="button-row two-up">
+            <button id="check-health-btn" class="btn btn-primary">
+              检查连接
+            </button>
+            <button id="refresh-btn" class="btn btn-secondary">刷新偏好</button>
+          </div>
+
+          <div class="button-row two-up">
+            <button id="scenario-btn" class="btn btn-secondary">一键全流程</button>
+            <button id="summarize-btn" class="btn btn-secondary">离线总结</button>
+          </div>
+
+          <div class="button-row two-up">
+            <button id="reset-btn" class="btn btn-danger">重置状态</button>
+            <button id="trace-toggle-btn" class="btn btn-ghost">折叠 Trace</button>
+          </div>
+
+          <div class="status-strip">
+            <div>
+              <span class="status-label">当前状态</span>
+              <strong id="current-status">idle</strong>
+            </div>
+            <div>
+              <span class="status-label">待回答</span>
+              <strong id="pending-state">无</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel preference-panel">
+          <div class="panel-header">
+            <h2>偏好表</h2>
+            <span id="preference-count" class="panel-meta">0 条</span>
+          </div>
+          <div id="preferences-empty" class="empty-state">
+            当前还没有结构化偏好。
+          </div>
+          <div id="preferences-list" class="preferences-list"></div>
+        </section>
+      </aside>
+
+      <main class="main-stage">
+        <section class="stage-top">
+          <div class="panel narrative-panel">
+            <div class="panel-header">
+              <h2>演示主线</h2>
+              <span class="panel-meta">围绕 ASK / ACT 切换</span>
+            </div>
+
+            <div class="timeline-strip">
+              <article class="timeline-item">
+                <span class="timeline-step">Day 1</span>
+                <p>一段家庭出游对话，系统积累上下文。</p>
+              </article>
+              <article class="timeline-item">
+                <span class="timeline-step">Night</span>
+                <p>离线总结抽出家庭出游偏好。</p>
+              </article>
+              <article class="timeline-item">
+                <span class="timeline-step">Day 2</span>
+                <p>“好热啊”触发追问，确认健康状态。</p>
+              </article>
+              <article class="timeline-item">
+                <span class="timeline-step">Day 9</span>
+                <p>相似场景复现，直接执行更少追问。</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel insight-panel">
+            <div class="panel-header">
+              <h2>本轮摘要</h2>
+              <span id="decision-badge" class="badge neutral">等待输入</span>
+            </div>
+
+            <div class="insight-grid">
+              <div class="insight-card">
+                <span class="insight-label">动作</span>
+                <strong id="tool-name">-</strong>
+              </div>
+              <div class="insight-card">
+                <span class="insight-label">偏好召回</span>
+                <strong id="retrieval-count">0</strong>
+              </div>
+              <div class="insight-card">
+                <span class="insight-label">学习结果</span>
+                <strong id="learned-state">无</strong>
+              </div>
+              <div class="insight-card">
+                <span class="insight-label">过期偏好</span>
+                <strong id="expired-count">0</strong>
+              </div>
+            </div>
+
+            <div class="signal-grid">
+              <div class="signal-card">
+                <span class="signal-label">缺失维度</span>
+                <div id="unknown-dimensions" class="signal-value">无</div>
+              </div>
+              <div class="signal-card">
+                <span class="signal-label">对话模式</span>
+                <div id="conversation-mode" class="signal-value">自由输入</div>
+              </div>
+            </div>
+
+            <div id="result-banner" class="result-banner">
+              等待后端返回当前回合结果。
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-grid">
+          <section class="panel chat-panel">
+            <div class="panel-header">
+              <h2>会话区</h2>
+              <span id="chat-hint" class="panel-meta">发送用户输入或运行快速演示</span>
+            </div>
+
+            <div id="chat-log" class="chat-log"></div>
+
+            <form id="composer" class="composer">
+              <label class="composer-field" for="user-input">
+                <span>输入</span>
+                <textarea
+                  id="user-input"
+                  rows="3"
+                  placeholder="例如：周末一家人要去海边了，好热啊。"
+                ></textarea>
+              </label>
+              <div class="composer-actions">
+                <p id="composer-mode" class="composer-mode">当前发送到 /turn</p>
+                <button type="submit" class="btn btn-primary">发送</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="trace-panel" class="panel trace-panel">
+            <div class="panel-header">
+              <h2>Decision Trace</h2>
+              <span class="panel-meta">当前轮为什么 ASK / ACT</span>
+            </div>
+
+            <div class="trace-group">
+              <h3>追问上下文</h3>
+              <div id="pending-card" class="pending-card is-hidden"></div>
+            </div>
+
+            <div class="trace-group">
+              <h3>当前上下文</h3>
+              <pre id="context-json" class="code-block">暂无</pre>
+            </div>
+
+            <div class="trace-group">
+              <h3>候选偏好</h3>
+              <pre id="candidates-json" class="code-block">暂无</pre>
+            </div>
+
+            <div class="trace-group">
+              <h3>召回偏好</h3>
+              <pre id="retrieved-json" class="code-block">暂无</pre>
+            </div>
+
+            <div class="trace-group">
+              <h3>工具结果</h3>
+              <pre id="tool-result" class="code-block">暂无</pre>
+            </div>
+
+            <div class="trace-group">
+              <h3>Decision JSON</h3>
+              <pre id="decision-json" class="code-block">暂无</pre>
+            </div>
+
+            <div class="trace-group">
+              <h3>Trace JSON</h3>
+              <pre id="trace-json" class="code-block">暂无</pre>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="message-template">
+      <article class="message">
+        <div class="message-meta">
+          <span class="message-role"></span>
+          <span class="message-tag"></span>
+        </div>
+        <p class="message-body"></p>
+      </article>
+    </template>
+
+    <template id="preference-template">
+      <article class="preference-item">
+        <div class="preference-top">
+          <strong class="preference-name"></strong>
+          <span class="preference-status"></span>
+        </div>
+        <div class="preference-value"></div>
+        <div class="preference-condition"></div>
+        <div class="preference-meta"></div>
+        <p class="preference-evidence"></p>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
