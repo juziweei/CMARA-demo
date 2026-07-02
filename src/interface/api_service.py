@@ -111,7 +111,7 @@ class DemoAPIService:
             value=24,
             condition={"type": "default"},
             source="user_stated",
-            evidence="用户说一家人出去玩时，车里空调 24 度最舒服。",
+            evidence="The user said that when the family goes out together, 24 C is the most comfortable cabin temperature.",
         )
         session.remember_preference(
             preference="ac_temperature",
@@ -122,7 +122,7 @@ class DemoAPIService:
                 "target": "sick",
             },
             source="user_stated",
-            evidence="用户说如果自己还在感冒，带家人出门时空调别太冷，25.5 度更舒服。",
+            evidence="The user said that if they still have a cold during a family trip, the cabin should not be too cold and 25.5 C is more comfortable.",
         )
         records = self._state.runtime.preference_table.list_preferences()
         return {

@@ -102,86 +102,89 @@ def build_system_prompt(
 ) -> str:
     tool_lines = "\n".join(_render_tool_meta(tools_meta or TOOLS_META))
     return f"""
-你是一个车载智能助手的动作决策器。你的职责只有一个：在当前轮从可用工具中选择 1 个。
+You are the action decision module for an in-car intelligent assistant. Your only job is to choose exactly one available tool for the current turn.
 
-你只能做两类决策：
-1. ACT：直接调用某个车控工具执行动作
-2. ASK：调用 ask_user(question) 追问 1 个最小必要信息
+You can make two kinds of decisions:
+1. ACT: directly call a vehicle-control tool.
+2. ASK: call ask_user(question) to ask for one minimal missing piece of information.
 
-你会收到：
-- 用户当前说的话
-- 系统从长期记忆中检索到的 active 偏好
+You will receive:
+- the current user utterance
+- active preferences retrieved from long-term memory
 
-请按下面顺序在内部判断，然后只输出 tool call：
+Reason internally in this order, then output only a tool call:
 
-步骤1：先提取“当前话语里已经明确给出的事实”
-- 只有用户明确说出的事实才算成立。
-- 不要脑补、不要根据常识补全、不要假设用户的状态。
+Step 1: Extract facts explicitly stated in the current utterance.
+- Only facts explicitly stated by the user count.
+- Do not infer, assume, or fill in missing user state from common sense.
 
-步骤2：找出“与当前动作相关”的候选偏好
-- 只看和当前请求同一偏好对象、同一动作相关的偏好。
-- 无关偏好忽略，不要因为记忆里有别的偏好就追问无关问题。
+Step 2: Identify candidate preferences relevant to the requested action.
+- Only use preferences about the same control object/action as the current request.
+- Ignore unrelated preferences. Do not ask about unrelated memory.
 
-步骤3：判断是否已经能唯一确定动作
-- 如果用户当前话语本身已经明确给出了动作或参数，直接执行，不需要再问。
-- 如果只有一条相关偏好，且它的触发条件在当前情境下明确成立，直接执行。
-- 如果一条偏好带有更具体的条件，而该条件在当前情境下被明确满足，另一条只是 default 兜底偏好，则优先执行更具体的那条，不要再问。
-- 如果有多条候选偏好，但它们最终指向同一个工具和同一参数，也直接执行，不要因为“条数多”而提问。
-- 当条件已经明确、动作代价低且可逆时，直接执行，不要多问。
+Step 3: Decide whether the action is already uniquely identifiable.
+- If the current utterance explicitly gives an action or parameter, execute it directly.
+- If exactly one relevant preference applies and its condition is clearly satisfied, execute it directly.
+- If a specific conditional preference is clearly satisfied and another candidate is only a default fallback, prefer the specific preference and do not ask.
+- If multiple candidates lead to the same tool and same argument, execute directly.
+- If the condition is clear and the action is low-cost and reversible, execute directly.
 
-步骤4：只有在“缺少一个决定动作所必需的关键信息”时，才 ask_user
-- 如果多条偏好互相冲突，或者都可能适用，但当前情境无法区分，不要猜，调用 ask_user。
-- 如果偏好的触发条件依赖某个缺失信息，例如健康状态、天气、是否疲劳，而用户当前并没有提供这个信息，不要假设，调用 ask_user。
-- 如果当前话语已经是对上一轮澄清问题的直接回答，并且这个回答已经补全了缺失信息，就不得重复追问同一个维度，必须直接执行。
-- 如果当前没有任何相关偏好，且用户当前话语也没有明确给出可执行参数，调用 ask_user 收集最小必要偏好。
+Step 4: Ask only when one action-critical dimension is missing.
+- If multiple preferences conflict or could apply, and the current context cannot distinguish them, do not guess; call ask_user.
+- If a preference condition depends on missing information such as health state, weather, or fatigue, and the user did not provide it, ask.
+- If the current utterance is already a direct answer to the previous clarification question and it resolves the missing dimension, do not ask again; execute.
+- If there is no relevant preference and the user did not provide an executable parameter, ask for the minimal necessary preference.
 
-ASK 的问题必须满足：
-- 只问 1 个缺失维度，不要一口气问多个问题。
-- 问题要短、直接、可回答，不要长篇解释。
-- 问题必须说明“不同回答会带来什么不同动作”。
-- 不要重复询问当前话语已经明确给出的信息。
+ASK question requirements:
+- Ask only one missing dimension.
+- Keep the question short, direct, and easy to answer.
+- Explain what different answers will do.
+- Do not ask for information already stated by the user.
+- The question must be written in English.
 
-健康状态做如下归一化理解：
-- “好了 / 好多了 / 恢复了 / 康复了 / 完全康复了” => health_state == recovering
-- “还没好 / 没好 / 还在感冒 / 还病着 / 还是不舒服” => health_state == sick
+Health-state normalization:
+- "better / recovered / recovering / basically recovered / much better / feeling better" => health_state == recovering
+- "still sick / not recovered / still have a cold / still uncomfortable" => health_state == sick
 
-硬约束：
-- 只能基于用户当前话语和检索到的偏好判断，不要编造偏好里没有的信息。
-- 不要为了显得谨慎而过度追问；只有在缺少关键区分信息时才问。
-- 只通过 tool call 作答，不要输出普通文本答案。
+Hard constraints:
+- Use only the current utterance and retrieved preferences. Do not invent missing preferences.
+- Do not over-ask just to be cautious. Ask only when a key distinguishing dimension is missing.
+- Use only tool calls. Do not output normal text.
+- All natural-language arguments, especially ask_user(question), must be in English.
 
-可用工具元信息：
+Available tool metadata:
 {tool_lines}
 
-示例A：
-用户当前说：好热啊
-偏好1：空调 25 度；条件=默认
-偏好2：空调 26.5 度；条件=health_state == sick
-结论：当前缺少健康状态信息，调用 ask_user，问题要明确区分“好了”和“还没好”。
+Example A:
+Current user utterance: It feels hot.
+Preference 1: AC 25 C; condition=default
+Preference 2: AC 26.5 C; condition=health_state == sick
+Conclusion: health state is missing. Call ask_user with an English question that distinguishes "recovered" from "still sick".
 
-示例B：
-用户当前说：好热啊
-偏好1：空调 25 度；条件=默认
-结论：条件明确且无冲突，直接调用 set_ac_temperature(value=25)。
+Example B:
+Current user utterance: It feels hot.
+Preference 1: AC 25 C; condition=default
+Conclusion: condition is clear and there is no conflict. Call set_ac_temperature(value=25).
 
-示例C：
-用户当前说：感冒恢复了，还是有点热
-偏好1：空调 25 度；条件=默认
-偏好2：空调 25 度；条件=health_state == recovering
-结论：当前情境明确满足 recovering，而且两条偏好最终动作相同，直接调用 set_ac_temperature(value=25)。
+Example C:
+Current user utterance: I have recovered from the cold, but it still feels hot.
+Preference 1: AC 25 C; condition=default
+Preference 2: AC 25 C; condition=health_state == recovering
+Conclusion: recovering is explicit and both preferences lead to the same action. Call set_ac_temperature(value=25).
 
-示例D：
-用户当前说：用户先说：好热啊
-系统追问：您感冒好些了吗？好了我设25度，还没好我设26.5度。
-用户回答：好多了
-偏好1：空调 25 度；条件=默认
-偏好2：空调 26.5 度；条件=health_state == sick
-结论：当前回答已经补全健康状态信息，不要重复追问，直接调用 set_ac_temperature(value=25)。
+Example D:
+Current user utterance:
+Original user request: It feels hot.
+System clarification question: Are you feeling better from the cold? If you have recovered, I will set 25 C; if you are still sick, I will set 26.5 C.
+User clarification answer: I feel much better today.
+Preference 1: AC 25 C; condition=default
+Preference 2: AC 26.5 C; condition=health_state == sick
+Conclusion: the answer resolves health state. Do not ask again. Call set_ac_temperature(value=25).
 
-示例E：
-用户当前说：把空调调到24度
-检索到偏好：空调 25 度；条件=默认
-结论：当前话语已经明确给出动作参数，直接调用 set_ac_temperature(value=24)。
+Example E:
+Current user utterance: Set the AC to 24 degrees.
+Retrieved preference: AC 25 C; condition=default
+Conclusion: the current utterance explicitly gives a parameter. Call set_ac_temperature(value=24).
 """.strip()
 
 
@@ -232,46 +235,47 @@ def _compose_user_prompt(context: str, prepared: PreparedPolicyInput) -> str:
     current_instruction = trace["current_instruction"]
     current_facts = trace["current_facts"]
     unknown_dimensions = trace["unknown_dimensions"]
-    lines = ["当前用户请求："]
+    lines = ["Current user request:"]
     if parsed_context["is_clarification"]:
-        lines.append(f"- 组合上下文：{parsed_context['full_text']}")
-        lines.append(f"- 当前回答：{parsed_context['current_user_text']}")
+        lines.append(f"- Combined context: {parsed_context['full_text']}")
+        lines.append(f"- Current answer: {parsed_context['current_user_text']}")
     else:
-        lines.append(f"- 原话：{context}")
+        lines.append(f"- Raw utterance: {context}")
     if current_instruction:
         lines.append(
-            "- 当前明确指令："
+            "- Explicit current instruction: "
             f"{current_instruction['tool_name']}({ _render_tool_args(current_instruction['tool_args']) })"
         )
 
-    lines.extend(["", "从当前话语可直接确认的事实："])
+    lines.extend(["", "Facts directly confirmed by the current utterance:"])
     if not current_facts:
-        lines.append("- （暂无可直接确认的事实）")
+        lines.append("- no directly confirmed facts")
     else:
         lines.extend(f"- {item}" for item in current_facts)
 
-    lines.extend(["", "候选偏好："])
+    lines.extend(["", "Candidate preferences:"])
     if not prepared.retrieved_prefs:
-        lines.append("- （没有检索到相关偏好）")
+        lines.append("- no relevant preferences retrieved")
     else:
         for index, pref in enumerate(prepared.retrieved_prefs, start=1):
             lines.extend(_render_preference(index, pref))
 
-    lines.extend(["", "仍未知的关键维度："])
+    lines.extend(["", "Still-unknown key dimensions:"])
     if not unknown_dimensions:
-        lines.append("- （无）")
+        lines.append("- none")
     else:
         lines.extend(f"- {item}" for item in unknown_dimensions)
 
     lines.extend(
         [
             "",
-            "决策要求：",
-            "- 当前用户显式给出的参数优先于历史偏好。",
-            "- 具体条件偏好优先于 default。",
-            "- 多条偏好如果最终动作和参数完全一致，直接 ACT。",
-            "- 只有缺少唯一决定动作所必需的维度时才 ASK。",
-            "- 只选择一个工具。",
+            "Decision requirements:",
+            "- Explicit parameters in the current user utterance override historical preferences.",
+            "- Specific conditional preferences override default preferences.",
+            "- If multiple preferences lead to exactly the same action and arguments, ACT directly.",
+            "- ASK only when a dimension necessary to uniquely decide the action is missing.",
+            "- Select exactly one tool.",
+            "- If asking, the question must be in English.",
         ]
     )
     return "\n".join(lines)
@@ -309,7 +313,7 @@ def _condition_to_text(condition: Any) -> str:
     if not isinstance(condition, Mapping):
         return str(condition)
     if condition.get("type") == "default":
-        return "默认（无特殊条件）"
+        return "default, no special condition"
     if condition.get("type") == "merged":
         supporting = condition.get("supporting_conditions") or []
         if supporting:
@@ -338,6 +342,14 @@ def _parse_context(context: str) -> dict[str, Any]:
         re.DOTALL,
     )
     if not match:
+        match = re.search(
+            r"Original user request:\s*(.*?)\n"
+            r"System clarification question:\s*(.*?)\n"
+            r"User clarification answer:\s*(.*)",
+            text,
+            re.DOTALL | re.IGNORECASE,
+        )
+    if not match:
         return {
             "is_clarification": False,
             "full_text": text,
@@ -364,7 +376,7 @@ def _infer_context_facts(
             {
                 "dimension": "clarification",
                 "value": "answered",
-                "text": "这是对上一轮追问的直接回答。",
+                "text": "This is a direct answer to the previous clarification question.",
             }
         )
     if explicit_instruction:
@@ -373,12 +385,13 @@ def _infer_context_facts(
                 "dimension": "explicit_instruction",
                 "value": explicit_instruction["tool_name"],
                 "text": (
-                    "当前用户已明确给出动作参数："
+                    "The current user utterance explicitly provides the action parameter: "
                     f"{explicit_instruction['tool_name']}({ _render_tool_args(explicit_instruction['tool_args']) })"
                 ),
             }
         )
     normalized = parsed_context.get("current_user_text", "").strip()
+    lowered = normalized.lower()
     recovering_markers = (
         "好多了",
         "好些了",
@@ -390,6 +403,12 @@ def _infer_context_facts(
         "快好了",
         "康复了",
         "完全康复了",
+        "better",
+        "much better",
+        "feeling better",
+        "recovered",
+        "recovering",
+        "basically recovered",
     )
     sick_markers = (
         "还没好",
@@ -399,9 +418,24 @@ def _infer_context_facts(
         "还是不舒服",
         "还不舒服",
         "没恢复",
+        "still sick",
+        "not recovered",
+        "still have a cold",
+        "still uncomfortable",
+        "not feeling well",
     )
-    fatigue_markers = ("有点困", "犯困", "有些困", "疲惫", "疲劳")
-    if any(marker in normalized for marker in recovering_markers):
+    fatigue_markers = (
+        "有点困",
+        "犯困",
+        "有些困",
+        "疲惫",
+        "疲劳",
+        "sleepy",
+        "drowsy",
+        "tired",
+        "fatigued",
+    )
+    if any(marker in lowered for marker in recovering_markers):
         inferred.append(
             {
                 "dimension": "health_state",
@@ -409,7 +443,7 @@ def _infer_context_facts(
                 "text": "health_state == recovering",
             }
         )
-    elif any(marker in normalized for marker in sick_markers):
+    elif any(marker in lowered for marker in sick_markers):
         inferred.append(
             {
                 "dimension": "health_state",
@@ -417,7 +451,7 @@ def _infer_context_facts(
                 "text": "health_state == sick",
             }
         )
-    if any(marker in normalized for marker in fatigue_markers):
+    if any(marker in lowered for marker in fatigue_markers):
         inferred.append(
             {
                 "dimension": "fatigue_state",
@@ -589,12 +623,19 @@ def _infer_unknown_dimensions(
     unique = list(dict.fromkeys(unresolved))
     if unique:
         return unique
-    return ["用户当前想要的具体参数"]
+    return ["the concrete parameter the user wants now"]
 
 
 def _extract_explicit_instruction(parsed_context: Mapping[str, Any]) -> dict[str, Any]:
     current_text = str(parsed_context.get("current_user_text", "")).strip()
+    lowered = current_text.lower()
     ac_match = re.search(r"空调.*?(\d+(?:\.\d+)?)度", current_text)
+    if not ac_match:
+        ac_match = re.search(
+            r"(?:ac|air conditioning|air conditioner|climate|temperature).*?"
+            r"(\d+(?:\.\d+)?)\s*(?:c|°c|degrees?|deg)?",
+            lowered,
+        )
     if ac_match:
         return {
             "preference": "ac_temperature",
@@ -602,6 +643,11 @@ def _extract_explicit_instruction(parsed_context: Mapping[str, Any]) -> dict[str
             "tool_args": {"value": float(ac_match.group(1))},
         }
     seat_match = re.search(r"座椅加热.*?([0-3])档", current_text)
+    if not seat_match:
+        seat_match = re.search(
+            r"(?:seat heating|seat heater|heated seat).*?([0-3])",
+            lowered,
+        )
     if seat_match:
         return {
             "preference": "seat_heating",
@@ -609,6 +655,12 @@ def _extract_explicit_instruction(parsed_context: Mapping[str, Any]) -> dict[str
             "tool_args": {"level": int(seat_match.group(1))},
         }
     if "关掉座椅加热" in current_text or "座椅加热关掉" in current_text:
+        return {
+            "preference": "seat_heating",
+            "tool_name": "set_seat_heating",
+            "tool_args": {"level": 0},
+        }
+    if any(text in lowered for text in ("turn off seat heating", "seat heating off", "turn off the seat heater")):
         return {
             "preference": "seat_heating",
             "tool_name": "set_seat_heating",

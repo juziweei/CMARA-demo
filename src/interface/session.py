@@ -101,9 +101,9 @@ class DemoSession:
         answer_message = {"role": "user", "content": answer, "time_stamp": _now()}
         self.session_messages.append(answer_message)
         combined_context = (
-            f"用户先说：{pending.original_context}\n"
-            f"系统追问：{pending.question}\n"
-            f"用户回答：{answer}"
+            f"Original user request: {pending.original_context}\n"
+            f"System clarification question: {pending.question}\n"
+            f"User clarification answer: {answer}"
         )
         memory_inputs = [answer_message]
         retrieval_hits, prefs = self._retrieve_preferences(combined_context)
@@ -173,7 +173,7 @@ class DemoSession:
         memory_message = {"role": "user", "content": evidence, "time_stamp": _now()}
         assistant_message = {
             "role": "assistant",
-            "content": f"已记录偏好：{preference}={value}",
+            "content": f"Recorded preference: {preference}={value}",
             "time_stamp": _now(),
         }
         self.session_messages.append(memory_message)
@@ -218,12 +218,12 @@ class DemoSession:
                 session_messages=self.session_messages,
             )
             if self.responder is not None
-            else "好的，我在。"
+            else "Sure, I am here."
         )
         decision = Decision(
             action="REPLY",
             tool_name="general_chat",
-            rationale="普通对话直接交给助手回复层处理。",
+            rationale="General conversation is handled by the assistant responder.",
         )
         tool_result = {
             "tool": "general_chat",
@@ -292,8 +292,20 @@ class DemoSession:
             "音乐",
             "风",
             "ac",
+            "air conditioning",
+            "air conditioner",
+            "climate",
+            "temperature",
+            "hot",
+            "cold",
             "seat",
+            "seat heating",
             "music",
+            "play",
+            "turn on",
+            "turn off",
+            "set",
+            "adjust",
         )
         general_question_markers = (
             "怎么",
@@ -308,6 +320,14 @@ class DemoSession:
             "无聊",
             "介绍",
             "解释",
+            "how",
+            "why",
+            "what",
+            "weather",
+            "chat",
+            "bored",
+            "explain",
+            "tell me",
         )
         if any(marker in lowered for marker in action_markers):
             return False
@@ -315,7 +335,11 @@ class DemoSession:
             return any(marker in normalized for marker in general_question_markers)
         if any(marker in normalized for marker in ("谢谢", "你好", "早上好", "晚上好", "再见")):
             return True
+        if any(marker in lowered for marker in ("thanks", "hello", "hi", "good morning", "good evening", "bye")):
+            return True
         if any(marker in normalized for marker in ("聊聊", "无聊", "陪我")):
+            return True
+        if any(marker in lowered for marker in ("chat", "bored", "talk with me")):
             return True
         return not prefs and len(normalized) >= 4 and any(
             marker in normalized for marker in general_question_markers

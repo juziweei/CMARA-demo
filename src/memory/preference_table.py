@@ -70,7 +70,7 @@ class Condition:
 
     def describe(self) -> str:
         if self.type == "default":
-            return "默认（无特殊条件）"
+            return "default, no special condition"
         if self.operator is not None and self.target is not None:
             suffix = f" {self.unit}" if self.unit else ""
             return f"{self.type} {self.operator} {self.target}{suffix}"

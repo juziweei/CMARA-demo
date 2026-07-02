@@ -47,36 +47,36 @@ const els = {
 const scenarioSteps = [
   {
     type: "system",
-    text: "Day 0 已播种基础空调偏好，开始送入家庭出游对话。",
+    text: "Day 0 baseline climate preferences are seeded. Starting the family-trip dialogue.",
   },
   {
     type: "turn",
-    text: "这周末一家人去海边，先导航到东堤停车场吧。",
+    text: "This weekend our family is going to the coast. Please navigate to the East Pier parking lot first.",
   },
   {
     type: "turn",
-    text: "姐姐刚在后排睡着了，先别放音乐。",
+    text: "My daughter just fell asleep in the back seat, so do not play music for now.",
   },
   {
     type: "turn",
-    text: "一家人出去玩的时候，我一般不想车里太吵。",
+    text: "When the family goes out together, I usually prefer the car cabin to stay quiet.",
   },
   {
     type: "system",
-    text: "执行离线总结，尝试把家庭出游偏好写回偏好表。",
+    text: "Running offline summarization to write family-trip preferences back into the preference table.",
     action: "summarize",
   },
   {
     type: "turn",
-    text: "周末一家人要去海边了，好热啊。",
+    text: "We are taking a family trip to the coast this weekend, and it feels hot.",
   },
   {
     type: "clarification",
-    text: "好多了，今天基本恢复了。",
+    text: "I feel much better today, basically recovered.",
   },
   {
     type: "turn",
-    text: "下周一家人又要去郊游了，感冒恢复了，还是有点热。",
+    text: "Next week the family is going on another outing. I have recovered from the cold, but it still feels a bit hot.",
   },
 ];
 
@@ -117,13 +117,13 @@ function clearChat() {
 function setPending(pending) {
   state.pendingId = pending?.pending_id || null;
   state.pendingQuestion = pending?.question || "";
-  els.pendingState.textContent = state.pendingId ? "等待澄清" : "无";
+  els.pendingState.textContent = state.pendingId ? "Waiting for clarification" : "None";
   els.composerMode.textContent = state.pendingId
-    ? "当前发送到 /clarification"
-    : "当前发送到 /turn";
+    ? "Sending to /clarification"
+    : "Sending to /turn";
   els.chatHint.textContent = state.pendingId
-    ? "下一条输入会作为澄清回答提交"
-    : "发送用户输入或运行快速演示";
+    ? "The next user message will answer the clarification question"
+    : "Send a user turn or run the full demo";
   if (state.pendingId) {
     els.pendingCard.classList.remove("is-hidden");
     els.pendingCard.textContent = `pending_id: ${state.pendingId}\nquestion: ${pending.question}\noriginal_context: ${pending.original_context}`;
@@ -134,7 +134,7 @@ function setPending(pending) {
 }
 
 function renderPreferences(preferences) {
-  els.preferenceCount.textContent = `${preferences.length} 条`;
+  els.preferenceCount.textContent = `${preferences.length} item${preferences.length === 1 ? "" : "s"}`;
   els.preferencesList.innerHTML = "";
   els.preferencesEmpty.classList.toggle("is-hidden", preferences.length > 0);
 
@@ -145,14 +145,14 @@ function renderPreferences(preferences) {
     fragment.querySelector(".preference-value").textContent = `value: ${item.value}`;
     fragment.querySelector(".preference-condition").textContent = `condition: ${formatCondition(item.condition)}`;
     fragment.querySelector(".preference-meta").textContent = `source: ${item.source}  ·  time: ${item.timestamp}`;
-    fragment.querySelector(".preference-evidence").textContent = item.evidence || "无 evidence";
+    fragment.querySelector(".preference-evidence").textContent = item.evidence || "No evidence";
     els.preferencesList.appendChild(fragment);
   }
 }
 
 function formatCondition(condition) {
   if (!condition) return "-";
-  if (condition.type === "default") return "默认（无特殊条件）";
+  if (condition.type === "default") return "default, no special condition";
   const operator = condition.operator ? ` ${condition.operator} ` : " ";
   const target = condition.target !== undefined ? condition.target : "";
   const unit = condition.unit ? ` ${condition.unit}` : "";
@@ -169,43 +169,43 @@ function updateSummary(result) {
   const unknownDimensions = trace?.unknown_dimensions || [];
   const candidates = trace?.policy_candidates || [];
   const retrievedPrefs = result?.retrieved_preferences || trace?.retrieved_preferences || [];
-  const context = trace?.parsed_context || trace?.context || "暂无";
+  const context = trace?.parsed_context || trace?.context || "None";
   const mode = detectConversationMode(result, trace);
 
   els.currentStatus.textContent = status;
   els.toolName.textContent = toolName;
   els.retrievalCount.textContent = String(retrievalHits.length);
-  els.learnedState.textContent = learned ? `${learned.preference} -> ${learned.value}` : "无";
+  els.learnedState.textContent = learned ? `${learned.preference} -> ${learned.value}` : "None";
   els.expiredCount.textContent = String(expired.length);
   els.unknownDimensions.textContent = unknownDimensions.length
     ? unknownDimensions.join(" / ")
-    : "无";
+    : "None";
   els.conversationMode.textContent = mode;
-  els.resultBanner.textContent = result?.assistant_text || "等待后端返回当前回合结果。";
+  els.resultBanner.textContent = result?.assistant_text || "Waiting for the backend result for the current turn.";
   els.contextJson.textContent = pretty(context);
-  els.candidatesJson.textContent = pretty(candidates.length ? candidates : "暂无");
-  els.retrievedJson.textContent = pretty(retrievedPrefs.length ? retrievedPrefs : "暂无");
-  els.toolResult.textContent = pretty(result?.tool_result || "暂无");
-  els.decisionJson.textContent = pretty(result?.decision || "暂无");
-  els.traceJson.textContent = pretty(trace || "暂无");
+  els.candidatesJson.textContent = pretty(candidates.length ? candidates : "None");
+  els.retrievedJson.textContent = pretty(retrievedPrefs.length ? retrievedPrefs : "None");
+  els.toolResult.textContent = pretty(result?.tool_result || "None");
+  els.decisionJson.textContent = pretty(result?.decision || "None");
+  els.traceJson.textContent = pretty(trace || "None");
 
   if (status === "needs_user_input") {
-    setDecisionBadge("pending", "等待澄清");
+    setDecisionBadge("pending", "Needs Clarification");
   } else if (status === "acted") {
-    setDecisionBadge("online", "已执行");
+    setDecisionBadge("online", "Acted");
   } else if (status === "replied") {
-    setDecisionBadge("neutral", "普通回复");
+    setDecisionBadge("neutral", "Replied");
   } else {
-    setDecisionBadge("neutral", "等待输入");
+    setDecisionBadge("neutral", "Waiting");
   }
 }
 
 function detectConversationMode(result, trace) {
-  if (!result) return "自由输入";
-  if (result.status === "needs_user_input") return "追问模式";
-  if (result.decision?.tool_name === "general_chat") return "普通对话";
-  if (trace?.parsed_context?.is_clarification) return "澄清回答";
-  return "任务执行";
+  if (!result) return "Free Input";
+  if (result.status === "needs_user_input") return "Clarification Mode";
+  if (result.decision?.tool_name === "general_chat") return "General Chat";
+  if (trace?.parsed_context?.is_clarification) return "Clarification Answer";
+  return "Task Execution";
 }
 
 function pretty(value) {
@@ -254,12 +254,12 @@ async function refreshPreferences() {
 async function checkHealth() {
   try {
     const payload = await apiGet("/health");
-    setConnectionBadge("online", "在线");
-    addMessage("system", `健康检查成功：session_id=${payload.session_id}`, "health");
+    setConnectionBadge("online", "Online");
+    addMessage("system", `Health check succeeded: session_id=${payload.session_id}`, "health");
     return payload;
   } catch (error) {
-    setConnectionBadge("offline", "离线");
-    addMessage("system", `健康检查失败：${error.message}`, "health");
+    setConnectionBadge("offline", "Offline");
+    addMessage("system", `Health check failed: ${error.message}`, "health");
     throw error;
   }
 }
@@ -280,7 +280,7 @@ async function submitTurn(text) {
         text: trimmed,
       });
 
-  addMessage("assistant", payload.assistant_text || "(无回复)", payload.status);
+  addMessage("assistant", payload.assistant_text || "(no response)", payload.status);
   setPending(payload.pending);
   updateSummary(payload);
   await refreshPreferences();
@@ -289,7 +289,7 @@ async function submitTurn(text) {
 
 async function doSummarize() {
   const payload = await apiPost("/summarize", { session_id: "default" });
-  addMessage("system", `离线总结完成，新增 ${payload.count} 条偏好。`, "summarize");
+  addMessage("system", `Offline summarization completed. Added ${payload.count} preference${payload.count === 1 ? "" : "s"}.`, "summarize");
   await refreshPreferences();
   return payload;
 }
@@ -299,7 +299,7 @@ async function doReset() {
   state.pendingId = null;
   state.pendingQuestion = "";
   clearChat();
-  addMessage("system", "已重置 demo 状态。", "reset");
+  addMessage("system", "Demo state has been reset.", "reset");
   setPending(null);
   updateSummary(null);
   await refreshPreferences();
@@ -308,7 +308,7 @@ async function doReset() {
 
 async function seedFamilyTripDemo() {
   const payload = await apiPost("/demo/family_trip", { session_id: "default" });
-  addMessage("system", `已播种家庭出游演示初始偏好，共 ${payload.count} 条。`, "seed");
+  addMessage("system", `Seeded the family-trip demo with ${payload.count} initial preference${payload.count === 1 ? "" : "s"}.`, "seed");
   await refreshPreferences();
   return payload;
 }
@@ -318,7 +318,7 @@ async function runScenario() {
   setPending(null);
   updateSummary(null);
   await seedFamilyTripDemo();
-  addMessage("system", "开始一键全流程：家庭出游长期记忆闭环。", "scenario");
+  addMessage("system", "Starting the full demo: family-trip long-term memory loop.", "scenario");
   for (const step of scenarioSteps) {
     if (step.type === "system") {
       addMessage("system", step.text, "scenario");
@@ -327,7 +327,7 @@ async function runScenario() {
       }
     } else if (step.type === "clarification") {
       if (!state.pendingId) {
-        addMessage("system", "当前没有待回答追问，跳过澄清步骤。", "scenario");
+        addMessage("system", "There is no pending clarification. Skipping the clarification step.", "scenario");
         continue;
       }
       await submitTurn(step.text);
@@ -335,18 +335,18 @@ async function runScenario() {
       await submitTurn(step.text);
     }
   }
-  addMessage("system", "一键全流程结束。当前状态已经进入“学到后直接执行”的复现阶段。", "scenario");
+  addMessage("system", "Full demo completed. The system is now in the learned-and-reuse stage.", "scenario");
 }
 
 function withBusy(button, fn) {
   return async (...args) => {
     const original = button.textContent;
     button.disabled = true;
-    button.textContent = "处理中...";
+    button.textContent = "Working...";
     try {
       await fn(...args);
     } catch (error) {
-      addMessage("system", `操作失败：${error.message}`, "error");
+      addMessage("system", `Operation failed: ${error.message}`, "error");
     } finally {
       button.disabled = false;
       button.textContent = original;
@@ -358,7 +358,7 @@ function initTraceToggle() {
   els.traceToggleBtn.addEventListener("click", () => {
     state.traceCollapsed = !state.traceCollapsed;
     els.tracePanel.classList.toggle("trace-collapsed", state.traceCollapsed);
-    els.traceToggleBtn.textContent = state.traceCollapsed ? "展开 Trace" : "折叠 Trace";
+    els.traceToggleBtn.textContent = state.traceCollapsed ? "Expand Trace" : "Collapse Trace";
   });
 }
 
@@ -372,7 +372,7 @@ function bindEvents() {
     try {
       await submitTurn(value);
     } catch (error) {
-      addMessage("system", `发送失败：${error.message}`, "error");
+      addMessage("system", `Send failed: ${error.message}`, "error");
     }
   });
 
@@ -387,7 +387,7 @@ async function bootstrap() {
   setApiBase();
   bindEvents();
   initTraceToggle();
-  addMessage("system", "页面已就绪。先做健康检查，再开始演示。", "init");
+  addMessage("system", "Page is ready. Check the API connection before starting the demo.", "init");
   try {
     await checkHealth();
     await refreshPreferences();
